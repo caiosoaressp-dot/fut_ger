@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gerenciador de Pelada Pro v1.5</title>
+    <style>
+        :root {
+            --bg-color: #121212; --card-bg: #1e1e1e; --text-primary: #ffffff;
+            --text-secondary: #b0b0b0; --accent: #00e676; --danger: #ff5252;
+            --warning: #ffab40; --action: #2979ff; --border-radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-primary); padding: 16px; min-height: 100vh; }
+        .hidden { display: none !important; }
+        .flex-row { display: flex; align-items: center; gap: 8px; }
+        .flex-col { display: flex; flex-direction: column; gap: 12px; }
+        .full-width { width: 100%; }
+        .card { background-color: var(--card-bg); padding: 16px; border-radius: var(--border-radius); margin-bottom: 12px; border: 1px solid #333; }
+        button { border: none; border-radius: var(--border-radius); padding: 14px; font-weight: 600; cursor: pointer; transition: 0.1s; display: flex; align-items: center; justify-content: center; }
+        button:active { transform: scale(0.98); }
+        .btn-primary { background-color: var(--accent); color: #000; }
+        .btn-secondary { background-color: #333; color: #fff; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-action { background-color: var(--action); color: white; }
+        input, select { background: #000; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 8px; font-size: 1rem; width: 100%; }
+        .scoreboard { display: flex; justify-content: space-around; background: #000; padding: 15px; border-radius: 15px; border: 1px solid #333; }
+        .score-val { font-size: 2.5rem; font-weight: 800; display: block; text-align: center; }
+        .timer-val { font-size: 1.8rem; font-family: monospace; color: var(--accent); text-align: center; }
+        .team-roster { display: flex; gap: 10px; }
+        .roster-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; font-size: 0.85rem; }
+        .roster-player { padding: 5px 0; border-bottom: 1px solid #333; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .admin-toggle { position: fixed; bottom: 20px; right: 20px; background: #444; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .admin-toggle.active { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+    </style>
+</head>
+<body>
+
+    <h2 id="admin-status" class="hidden" style="color:var(--danger); font-size: 0.7rem; text-align: center;">MODO ADMINISTRADOR ATIVO</h2>
+
+    <section id="screen-setup" class="flex-col">
+        <div class="card">
+            <h3>Novo Jogador</h3>
+            <div class="flex-row" style="margin-top:10px">
+                <input type="text" id="input-player-name" placeholder="Nome" style="flex:1">
+                <label style="white-space: nowrap;"><input type="checkbox" id="check-is-gk"> GK?</label>
+            </div>
+            <button class="btn-primary full-width" style="margin-top:10px" id="btn-add-player">Adicionar Jogador</button>
+        </div>
+        <div class="card">
+            <h3>Lista (<span id="player-count">0</span>)</h3>
+            <div id="list-players" style="max-height: 200px; overflow-y: auto; margin-top:10px"></div>
+        </div>
+        <button class="btn-action full-width" id="btn-start-sorteio" disabled>SORTEAR E COMEÇAR</button>
+    </section>
+
+    <section id="screen-match" class="hidden flex-col">
+        <div class="scoreboard">
+            <div><small>TIME A</small><span id="score-a" class="score-val">0</span></div>
+            <div><div id="timer-display" class="timer-val">07:00</div><small id="timer-status">AGUARDANDO</small></div>
+            <div><small>TIME B</small><span id="score-b" class="score-val">0</span></div>
+        </div>
+
+        <div class="team-roster">
+            <div class="roster-col"><b>TIME A</b><div id="roster-a"></div></div>
+            <div class="roster-col"><b>TIME B</b><div id="roster-b"></div></div>
+        </div>
+
+        <div class="flex-row admin-only-section">
+            <button class="btn-primary full-width" id="btn-goal-a">GOL A</button>
+            <button class="btn-primary full-width" id="btn-goal-b">GOL B</button>
+        </div>
+
+        <div class="admin-only-section flex-col" style="border-top:1px solid #333; padding-top:10px">
+            <div class="flex-row">
+                <button class="btn-secondary full-width" id="btn-timer-toggle">Play/Pause</button>
+                <button class="btn-secondary full-width" id="btn-timer-reset">Reset Tempo</button>
+            </div>
+            <div class="flex-row">
+                <button class="btn-secondary full-width" id="btn-substitute">🔄 Substituir</button>
+                <button class="btn-secondary full-width" id="btn-swap-gk">🧤 Trocar GK</button>
+            </div>
+            <button class="btn-danger full-width" id="btn-end-match">Apitar Fim de Jogo</button>
+        </div>
+
+        <div class="card">
+            <div class="flex-row" style="justify-content:space-between">
+                <b>Fila de Espera</b>
+                <button class="btn-primary admin-only-section" id="btn-open-add-late" style="padding:5px 10px; font-size:0.7rem">➕ NOVO</button>
+            </div>
+            <div id="queue-display" style="font-size:0.8rem; color:#aaa; margin-top:5px"></div>
+        </div>
+        <button class="btn-secondary full-width" id="btn-view-stats">Ver Estatísticas</button>
+    </section>
+
+    <section id="screen-stats" class="hidden flex-col">
+        <div class="card"><h3>Artilharia ⚽</h3><div id="list-scorers"></div></div>
+        <div class="card"><h3>Assistências 👟</h3><div id="list-assists"></div></div>
+        <button class="btn-action full-width" id="btn-copy-report">Copiar para WhatsApp</button>
+        <button class="btn-secondary full-width" id="btn-back-match">Voltar ao Jogo</button>
+    </section>
+
+    <div id="modal-goal" class="modal-overlay hidden"><div class="card flex-col"><h3>GOL!</h3><label>Autor:</label><select id="select-scorer"></select><label>Assist:</label><select id="select-assist"></select><button class="btn-primary full-width" id="btn-confirm-goal">Confirmar</button><button class="btn-secondary full-width" id="btn-cancel-goal">Cancelar</button></div></div>
+    
+    <div id="modal-sub" class="modal-overlay hidden"><div class="card flex-col"><h3>Substituição</h3><label>Quem sai?</label><select id="select-sub-out"></select><label>Quem entra?</label><select id="select-sub-in"></select><button class="btn-action full-width" id="btn-confirm-sub">Trocar</button><button class="btn-secondary full-width" id="btn-cancel-sub">Cancelar</button></div></div>
+    
+    <div id="modal-swap-gk" class="modal-overlay hidden"><div class="card flex-col"><h3>🧤 Trocar Goleiro</h3><p style="font-size:0.8rem; color:#aaa">O selecionado assume o gol e o antigo vai para a linha.</p><select id="select-new-gk"></select><button class="btn-primary full-width" id="btn-confirm-swap-gk">Trocar Agora</button><button class="btn-secondary full-width" id="btn-cancel-swap-gk">Cancelar</button></div></div>
+    
+    <div id="modal-add-late" class="modal-overlay hidden"><div class="card flex-col"><h3>Chegou mais um</h3><input id="input-late-name" placeholder="Nome"><label><input type="checkbox" id="check-late-gk"> GK Fixo?</label><button class="btn-primary full-width" id="btn-confirm-add-late">Adicionar à Fila</button><button class="btn-secondary full-width" id="btn-cancel-add-late">Fechar</button></div></div>
+    
+    <div id="modal-tie" class="modal-overlay hidden"><div class="card flex-col"><h3>Empatou!</h3><button class="btn-danger full-width" id="btn-tie-both-out">Ambos Saem</button><div class="flex-row"><button class="btn-primary full-width" id="btn-tie-win-a">Vitória A</button><button class="btn-primary full-width" id="btn-tie-win-b">Vitória B</button></div></div></div>
+
+    <div id="btn-admin-toggle" class="admin-toggle">👮</div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const state = {
+            players: [], queue: [], teamA: [], teamB: [],
+            match: { time: 420, isRunning: false, scoreA: 0, scoreB: 0, events: [] },
+            isAdmin: localStorage.getItem('pelada_admin') === 'true'
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const formatT = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+
+        const updateUI = () => {
+            document.querySelectorAll('.admin-only-section').forEach(el => state.isAdmin ? el.classList.remove('hidden') : el.classList.add('hidden'));
+            $('admin-status').className = state.isAdmin ? "" : "hidden";
+            $('btn-admin-toggle').classList.toggle('active', state.isAdmin);
+        };
+
+        const renderRosters = () => {
+            const goals = {}; state.match.events.forEach(e => { if(e.type==='goal') goals[e.p]=(goals[e.p]||0)+1; });
+            const draw = (ids, el) => {
+                $(el).innerHTML = ids.map((id, idx) => {
+                    const p = state.players.find(x=>x.id===id);
+                    return `<div class="roster-player">${idx===0?'🧤 ':''}${p.name} ${'⚽'.repeat(goals[id]||0)}</div>`;
+                }).join('');
+            };
+            draw(state.teamA, 'roster-a'); draw(state.teamB, 'roster-b');
+            $('queue-display').textContent = state.queue.map(id => state.players.find(x=>x.id===id).name).join(', ') || "Fila vazia";
+        };
+
+        // SETUP
+        $('btn-add-player').onclick = () => {
+            const n = $('input-player-name').value.trim();
+            if(!n) return;
+            state.players.push({id: Math.random(), name: n, gk: $('check-is-gk').checked, goals:0, assists:0});
+            $('input-player-name').value = ''; $('check-is-gk').checked = false;
+            $('list-players').innerHTML = state.players.map(p => `<div>• ${p.name} ${p.gk?'<b>(GK)</b>':''}</div>`).join('');
+            $('player-count').textContent = state.players.length;
+            $('btn-start-sorteio').disabled = state.players.length < 10;
+        };
+
+        $('btn-start-sorteio').onclick = () => {
+            let gks = state.players.filter(p=>p.gk).map(p=>p.id).sort(()=>Math.random()-0.5);
+            let lines = state.players.filter(p=>!p.gk).map(p=>p.id).sort(()=>Math.random()-0.5);
+            state.teamA = [gks.length?gks.pop():lines.pop(), ...lines.splice(0,4)];
+            state.teamB = [gks.length?gks.pop():lines.pop(), ...lines.splice(0,4)];
+            state.queue = [...gks, ...lines];
+            $('screen-setup').classList.add('hidden'); $('screen-match').classList.remove('hidden');
+            renderRosters();
+        };
+
+        // TIMER
+        $('btn-timer-toggle').onclick = () => {
+            if(state.match.isRunning) { clearInterval(state.timerInterval); state.match.isRunning = false; }
+            else { state.match.isRunning = true; state.timerInterval = setInterval(() => {
+                if(state.match.time > 0) { state.match.time--; $('timer-display').textContent = formatT(state.match.time); }
+            }, 1000); }
+        };
+
+        $('btn-timer-reset').onclick = () => { 
+            state.match.time = 420; $('timer-display').textContent = "07:00"; 
+            state.match.scoreA = 0; state.match.scoreB = 0;
+            $('score-a').textContent = 0; $('score-b').textContent = 0;
+            state.match.events = []; renderRosters();
+        };
+
+        // GOLS
+        let goalTeam = 'A';
+        const openG = (t) => { goalTeam = t;
+            const ids = t==='A'?state.teamA:state.teamB;
+            $('select-scorer').innerHTML = '<option value="OWN">GOL CONTRA</option>' + ids.map(id => `<option value="${id}">${state.players.find(x=>x.id===id).name}</option>`).join('');
+            $('select-assist').innerHTML = '<option value="">Ninguém</option>' + ids.map(id => `<option value="${id}">${state.players.find(x=>x.id===id).name}</option>`).join('');
+            $('modal-goal').classList.remove('hidden');
+        };
+        $('btn-goal-a').onclick = () => openG('A');
+        $('btn-goal-b').onclick = () => openG('B');
+        $('btn-confirm-goal').onclick = () => {
+            const sid = $('select-scorer').value;
+            if(sid==='OWN') { goalTeam==='A'?state.match.scoreB++:state.match.scoreA++; }
+            else { 
+                const p = state.players.find(x=>x.id==sid); p.goals++;
+                state.match.events.push({type:'goal', p: sid});
+                goalTeam==='A'?state.match.scoreA++:state.match.scoreB++;
+                const aid = $('select-assist').value; if(aid && aid!=sid) state.players.find(x=>x.id==aid).assists++;
+            }
+            $('score-a').textContent = state.match.scoreA; $('score-b').textContent = state.match.scoreB;
+            $('modal-goal').classList.add('hidden'); renderRosters();
+        };
+        $('btn-cancel-goal').onclick = () => $('modal-goal').classList.add('hidden');
+
+        // SUBSTITUIÇÃO
+        $('btn-substitute').onclick = () => {
+            const playing = [...state.teamA, ...state.teamB];
+            $('select-sub-out').innerHTML = playing.map(id => `<option value="${id}">${state.players.find(x=>x.id===id).name}</option>`).join('');
+            $('select-sub-in').innerHTML = state.queue.map(id => `<option value="${id}">${state.players.find(x=>x.id===id).name}</option>`).join('');
+            $('modal-sub').classList.remove('hidden');
+        };
+        $('btn-confirm-sub').onclick = () => {
+            const outId = parseFloat($('select-sub-out').value);
+            const inId = parseFloat($('select-sub-in').value);
+            if(!inId) return alert("Fila vazia!");
+            if(state.teamA.includes(outId)) state.teamA[state.teamA.indexOf(outId)] = inId;
+            else state.teamB[state.teamB.indexOf(outId)] = inId;
+            state.queue = state.queue.filter(x=>x!==inId); state.queue.push(outId);
+            renderRosters(); $('modal-sub').classList.add('hidden');
+        };
+        $('btn-cancel-sub').onclick = () => $('modal-sub').classList.add('hidden');
+
+        // --- CORREÇÃO: TROCAR GK ---
+        $('btn-swap-gk').onclick = () => {
+            const buildOptions = (t, ids) => `<optgroup label="Time ${t}">${ids.map(id => `<option value="${id}">${state.players.find(x=>x.id===id).name}</option>`).join('')}</optgroup>`;
+            $('select-new-gk').innerHTML = buildOptions('A', state.teamA) + buildOptions('B', state.teamB);
+            $('modal-swap-gk').classList.remove('hidden');
+        };
+        $('btn-confirm-swap-gk').onclick = () => {
+            const id = parseFloat($('select-new-gk').value);
+            const t = state.teamA.includes(id) ? state.teamA : state.teamB;
+            const idx = t.indexOf(id);
+            // O selecionado vai para a posição 0 (goleiro), o antigo goleiro vai para onde o selecionado estava
+            [t[0], t[idx]] = [t[idx], t[0]];
+            renderRosters();
+            $('modal-swap-gk').classList.add('hidden');
+        };
+        $('btn-cancel-swap-gk').onclick = () => $('modal-swap-gk').classList.add('hidden');
+
+        // FIM DE JOGO
+        $('btn-end-match').onclick = () => {
+            if(state.match.scoreA === state.match.scoreB) $('modal-tie').classList.remove('hidden');
+            else finish(state.match.scoreA > state.match.scoreB ? 'A' : 'B');
+        };
+        const finish = (win) => {
+            let winners = win === 'A' ? state.teamA : state.teamB;
+            let losers = win === 'A' ? state.teamB : state.teamA;
+            state.queue.push(...losers);
+            state.queue = [...winners, ...state.queue];
+            state.teamA = state.queue.splice(0,5); state.teamB = state.queue.splice(0,5);
+            $('btn-timer-reset').click(); $('modal-tie').classList.add('hidden');
+        };
+        $('btn-tie-both-out').onclick = () => { 
+            state.queue.push(...state.teamA, ...state.teamB); 
+            state.teamA = state.queue.splice(0,5); state.teamB = state.queue.splice(0,5); 
+            $('btn-timer-reset').click(); $('modal-tie').classList.add('hidden'); 
+        };
+        $('btn-tie-win-a').onclick = () => finish('A');
+        $('btn-tie-win-b').onclick = () => finish('B');
+
+        // ESTATISTICAS
+        $('btn-view-stats').onclick = () => {
+            const sortP = (key) => [...state.players].sort((a,b)=>b[key]-a[key]).filter(x=>x[key]>0);
+            $('list-scorers').innerHTML = sortP('goals').map(p=>`<div>• ${p.name}: <b>${p.goals}</b></div>`).join('') || "Sem gols";
+            $('list-assists').innerHTML = sortP('assists').map(p=>`<div>• ${p.name}: <b>${p.assists}</b></div>`).join('') || "Sem assistências";
+            $('screen-match').classList.add('hidden'); $('screen-stats').classList.remove('hidden');
+        };
+        $('btn-back-match').onclick = () => { $('screen-stats').classList.add('hidden'); $('screen-match').classList.remove('hidden'); };
+        
+        $('btn-copy-report').onclick = () => {
+            let txt = "*Relatório Pelada*\n\nArtilheiros:\n" + state.players.filter(p=>p.goals>0).map(p=>`${p.name}: ${p.goals}`).join('\n');
+            navigator.clipboard.writeText(txt); alert("Copiado para o WhatsApp!");
+        };
+
+        // CHEGADA TARDIA
+        $('btn-open-add-late').onclick = () => $('modal-add-late').classList.remove('hidden');
+        $('btn-confirm-add-late').onclick = () => {
+            const n = $('input-late-name').value; if(!n) return;
+            const p = {id: Math.random(), name: n, gk: $('check-late-gk').checked, goals:0, assists:0};
+            state.players.push(p); state.queue.push(p.id); renderRosters();
+            $('modal-add-late').classList.add('hidden'); $('input-late-name').value='';
+        };
+        $('btn-cancel-add-late').onclick = () => $('modal-add-late').classList.add('hidden');
+
+        $('btn-admin-toggle').onclick = () => { state.isAdmin = !state.isAdmin; localStorage.setItem('pelada_admin', state.isAdmin); updateUI(); };
+        updateUI();
+    });
+    </script>
+</body>
+</html>
